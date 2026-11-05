@@ -26,6 +26,13 @@
     "plugins": [
       "expo-router",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Permite que $(PRODUCT_NAME) use la cámara para tomar la foto de tu pastel o diseño de referencia.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",

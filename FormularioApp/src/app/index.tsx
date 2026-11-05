@@ -1,16 +1,30 @@
 import React, { useState } from 'react';
 import {
+  Alert,
+  Image,
+  Linking,
   StyleSheet,
   Text,
   View,
   TextInput,
   Pressable,
   ScrollView,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+type Producto = {
+  id: string;
+  nombre: string;
+  precio: string;
+  categoria: string;
+  stock: string;
+  descripcion: string;
+  foto?: string | null;
+};
 
 const CATEGORIAS = [
   { id: '1', nombre: 'Pasteles y Tortas', icon: '🎂' },
@@ -27,11 +41,13 @@ export default function App() {
   const [categoria, setCategoria] = useState('');
   const [stock, setStock] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [foto, setFoto] = useState<string | null>(null);
+  const [abriendoCamara, setAbriendoCamara] = useState(false);
 
   const [errors, setErrors] = useState<{ [key: string]: string | null }>({});
   const [exito, setExito] = useState<any>(null);
 
-  const [productos, setProductos] = useState([
+  const [productos, setProductos] = useState<Producto[]>([
     {
       id: 'p1',
       nombre: 'Torta Red Velvet 20cm',
@@ -49,6 +65,67 @@ export default function App() {
       descripcion: 'Cupcake esponjoso relleno de mermelada artesanal de arándanos.',
     },
   ]);
+
+  const solicitarPermisoCamara = async () => {
+    const { granted, canAskAgain } =
+      await ImagePicker.requestCameraPermissionsAsync();
+
+    if (granted) {
+      return true;
+    }
+
+    if (canAskAgain) {
+      Alert.alert(
+        'Permiso de cámara necesario',
+        'Necesitamos la cámara para tomar la foto de tu pastel. Puedes intentarlo de nuevo cuando quieras.',
+      );
+    } else {
+      // El sistema ya no vuelve a preguntar: solo se puede activar desde Ajustes.
+      Alert.alert(
+        'Cámara desactivada',
+        'Activa el permiso de cámara en los ajustes del dispositivo para tomar la foto de tu pastel.',
+        [
+          { text: 'Ahora no', style: 'cancel' },
+          { text: 'Abrir ajustes', onPress: () => Linking.openSettings() },
+        ],
+      );
+    }
+
+    return false;
+  };
+
+  const tomarFoto = async () => {
+    if (abriendoCamara) {
+      return;
+    }
+
+    setAbriendoCamara(true);
+    try {
+      const tienePermiso = await solicitarPermisoCamara();
+      if (!tienePermiso) {
+        return;
+      }
+
+      const resultado = await ImagePicker.launchCameraAsync({
+        mediaTypes: 'images',
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7,
+      });
+
+      // Si el usuario cancela, se conserva la foto anterior.
+      if (!resultado.canceled) {
+        setFoto(resultado.assets[0].uri);
+      }
+    } catch {
+      Alert.alert(
+        'No se pudo abrir la cámara',
+        'Verifica que el dispositivo tenga una cámara disponible e inténtalo de nuevo.',
+      );
+    } finally {
+      setAbriendoCamara(false);
+    }
+  };
 
   const validarFormulario = () => {
     const nuevosErrores: { [key: string]: string } = {};
@@ -96,6 +173,7 @@ export default function App() {
         categoria,
         stock: parseInt(stock, 10).toString(),
         descripcion: descripcion.trim(),
+        foto,
       };
 
       setProductos([nuevoProducto, ...productos]);
@@ -115,6 +193,7 @@ export default function App() {
     setCategoria('');
     setStock('');
     setDescripcion('');
+    setFoto(null);
     setErrors({});
   };
 
@@ -153,7 +232,7 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FDF8F5" />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -322,6 +401,39 @@ export default function App() {
               />
             </View>
 
+            {/* CAMPO OPCIONAL: FOTO DEL PASTEL */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Foto del Pastel o Referencia (Opcional)</Text>
+
+              {foto ? (
+                <Image
+                  source={{ uri: foto }}
+                  style={styles.photoPreview}
+                  accessibilityLabel="Vista previa de la foto del pastel"
+                />
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Text style={styles.photoPlaceholderIcon}>🎂</Text>
+                  <Text style={styles.photoPlaceholderText}>
+                    Aún no hay foto. Captura tu diseño de pastel o referencia de pedido.
+                  </Text>
+                </View>
+              )}
+
+              <Pressable
+                style={({ pressed }) => [
+                  foto ? styles.changePhotoButton : styles.photoButton,
+                  pressed || abriendoCamara ? styles.buttonPressed : null,
+                ]}
+                onPress={tomarFoto}
+                disabled={abriendoCamara}
+              >
+                <Text style={foto ? styles.changePhotoButtonText : styles.photoButtonText}>
+                  {foto ? '🔄 Cambiar foto' : '📷 Tomar foto del pastel'}
+                </Text>
+              </Pressable>
+            </View>
+
             {/* BOTONES DE ACCIÓN */}
             <View style={styles.buttonRow}>
               <Pressable
@@ -357,6 +469,13 @@ export default function App() {
 
             {productos.map((prod) => (
               <View key={prod.id} style={styles.productCard}>
+                {prod.foto ? (
+                  <Image
+                    source={{ uri: prod.foto }}
+                    style={styles.productPhoto}
+                    accessibilityLabel={`Foto de ${prod.nombre}`}
+                  />
+                ) : null}
                 <View style={styles.productCardHeader}>
                   <Text style={styles.productName}>{prod.nombre}</Text>
                   <Text style={styles.productPrice}>S/. {prod.precio}</Text>
@@ -575,6 +694,69 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: '#C2185B',
     fontWeight: '700',
+  },
+  photoPreview: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: 14,
+    marginTop: 4,
+    marginBottom: 10,
+    backgroundColor: '#FCE4EC',
+  },
+  photoPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: '#FFF5F8',
+    borderWidth: 1.5,
+    borderColor: '#F8BBD0',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  photoPlaceholderIcon: {
+    fontSize: 36,
+    marginBottom: 6,
+  },
+  photoPlaceholderText: {
+    fontSize: 13,
+    color: '#6D4C41',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  photoButton: {
+    backgroundColor: '#FCE4EC',
+    borderWidth: 1.5,
+    borderColor: '#D81B60',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  photoButtonText: {
+    color: '#C2185B',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  changePhotoButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D7CCC8',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  changePhotoButtonText: {
+    color: '#4E342E',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  productPhoto: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: 12,
+    marginBottom: 10,
+    backgroundColor: '#FCE4EC',
   },
   buttonRow: {
     flexDirection: 'column',
